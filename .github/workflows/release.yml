@@ -1,0 +1,62 @@
+name: release
+
+on:
+  create
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    container:
+      image: alpine:3.15
+    steps:
+      - name: Install package
+        run: |
+          set -x
+          apk update
+          apk add curl git ruby advancecomp
+      - uses: actions/checkout@v2
+      - name: Release
+        run: |
+          set -x
+
+          git fetch --tags
+          tag_name=$(git describe --tags --exact-match || true)
+          if [ -z "$tag_name" ]; then
+            exit
+          fi
+          version=$(ruby -e "puts ARGV[0].split('_').join('.')" "$tag_name")
+
+          advzip --add --shrink-insane --iter 20 upload.zip *.py LICENSE* io_scene_vrm
+
+          if ! curl \
+            --fail-with-body \
+            --show-error \
+            --location \
+            --output release.json \
+            --request POST \
+            --data "{\"tag_name\":\"$tag_name\", \"name\": \"[DRAFT] Version $version: \", \"draft\": true, \"prerelease\": true, \"generate_release_notes\": true}" \
+            --header 'Accept: application/vnd.github.v3+json' \
+            --header 'Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
+            https://api.github.com/repos/${{ github.repository }}/releases; then
+
+            cat release.json
+            exit 1
+          fi
+
+          upload_url=$(ruby -rjson -e "puts JSON.parse(File.read('release.json'))['upload_url'].sub(/{.+}$/, '')")
+
+          if ! curl \
+            --fail-with-body \
+            --show-error \
+            --location \
+            --output release_upload.json \
+            --request POST \
+            --header 'Accept: application/vnd.github.v3+json' \
+            --header 'Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
+            --header "Content-Type: application/zip" \
+            --data-binary @upload.zip \
+            "${upload_url}?name=VRM_Addon_for_Blender-${tag_name}.zip&label=VRM%20Add-on%20for%20Blender%20${version}%20(zip)"; then
+
+            cat release_upload.json
+            exit 1
+          fi
