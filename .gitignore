@@ -23,6 +23,7 @@
 !/poetry.lock
 !/pyproject.toml
 !/scripts/*.bat
+!/scripts/*.png
 !/scripts/*.sh
 !/tests/resources
 !/docs/*.jpg
